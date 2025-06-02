@@ -203,6 +203,18 @@ class InvadersGame:
         # ゲームの初期設定
         self.WIDTH = 160
         self.HEIGHT = 120
+        
+        # Pyxelの初期化（最初の1回だけ）
+        pyxel.init(self.WIDTH, self.HEIGHT, title="Invaders Game OOP")
+        
+        # ゲームの初期状態をセット
+        self.reset_game()
+        
+        # ゲームループの開始
+        pyxel.run(self.update, self.draw)
+    
+    def reset_game(self):
+        """ゲームの状態をリセット"""
         self.score = 0
         self.game_over = False
         
@@ -212,10 +224,6 @@ class InvadersGame:
         self.enemy_bullets = []
         self.enemy_manager = EnemyManager(self.WIDTH, self.HEIGHT)
         self.enemy_manager.create_enemies()
-        
-        # Pyxelの初期化
-        pyxel.init(self.WIDTH, self.HEIGHT, title="Invaders Game OOP")
-        pyxel.run(self.update, self.draw)
     
     def add_player_bullet(self, x, y):
         """プレイヤーの弾を追加"""
@@ -232,7 +240,7 @@ class InvadersGame:
         
         if self.game_over:
             if pyxel.btnp(pyxel.KEY_R):
-                self.__init__()
+                self.reset_game()  # __init__()の代わりにreset_game()を呼び出す
             return
         
         # プレイヤーの更新
