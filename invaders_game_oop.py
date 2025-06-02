@@ -37,7 +37,7 @@ class Player(GameObject):
     """プレイヤークラス"""
     def __init__(self, x, y, game_width):
         super().__init__(x, y, 8, 8, 11)
-        self.speed = 2
+        self.speed = 3  # 移動速度を2から3に上昇
         self.game_width = game_width
         self.bullet_cooldown = 0
         self.lives = 5  # プレイヤーのライフ数
@@ -52,12 +52,7 @@ class Player(GameObject):
         if pyxel.btn(pyxel.KEY_RIGHT) and self.x < self.game_width - self.width:
             self.x += self.speed
         
-        # 弾の発射
-        if pyxel.btnp(pyxel.KEY_SPACE) and self.bullet_cooldown <= 0:
-            bullet_x = self.x + self.width // 2 - 1  # 弾の幅の半分を引く
-            game.add_player_bullet(bullet_x, self.y)
-            self.bullet_cooldown = 10
-        
+        # 弾の発射はゲームクラスで処理
         if self.bullet_cooldown > 0:
             self.bullet_cooldown -= 1
             
@@ -96,7 +91,7 @@ class Bullet(GameObject):
 class PlayerBullet(Bullet):
     """プレイヤーの弾クラス"""
     def __init__(self, x, y):
-        super().__init__(x, y, 2, 4, 10, 4)
+        super().__init__(x, y, 2, 4, 10, 5)  # 速度を4から5に上昇
     
     def update(self, game):
         self.y -= self.speed
@@ -107,7 +102,7 @@ class PlayerBullet(Bullet):
 class EnemyBullet(Bullet):
     """敵の弾クラス"""
     def __init__(self, x, y):
-        super().__init__(x, y, 2, 4, 8, 2)
+        super().__init__(x, y, 2, 4, 8, 1)  # 速度を2から1に減速
     
     def update(self, game):
         self.y += self.speed
@@ -119,7 +114,7 @@ class Enemy(GameObject):
     """敵クラス"""
     def __init__(self, x, y):
         super().__init__(x, y, 8, 8, 8)
-        self.shoot_chance = 0.01
+        self.shoot_chance = 0.005  # 発射確率を0.01から0.005に減少
     
     def update(self, game):
         # 移動は EnemyManager で一括管理
@@ -139,15 +134,16 @@ class EnemyManager:
         self.game_height = game_height
         self.enemies = []
         self.move_dir = 1  # 1: 右, -1: 左
-        self.speed = 1
-        self.shoot_chance = 0.01
+        self.speed = 0.5  # 移動速度を1から0.5に減速
+        self.shoot_chance = 0.005  # 発射確率を0.01から0.005に減少
     
     def create_enemies(self):
         """敵を配置"""
         self.enemies = []
-        for y in range(5):
+        # 敵の初期位置をより上に配置（y座標を変更）
+        for y in range(3):  # 行数を5から3に減らす
             for x in range(6):
-                enemy = Enemy(20 + x * 20, 10 + y * 10)
+                enemy = Enemy(20 + x * 20, 5 + y * 10)  # y座標を10から5に変更
                 enemy.shoot_chance = self.shoot_chance
                 self.enemies.append(enemy)
     
@@ -169,7 +165,7 @@ class EnemyManager:
             self.move_dir *= -1
             for enemy in self.enemies:
                 if enemy.is_active:
-                    enemy.y += 5
+                    enemy.y += 3  # 下降幅を5から3に減少
         else:
             for enemy in self.enemies:
                 if enemy.is_active:
@@ -181,8 +177,8 @@ class EnemyManager:
         
         # 全滅判定
         if all(not enemy.is_active for enemy in self.enemies):
-            self.speed += 0.5
-            self.shoot_chance += 0.005
+            self.speed += 0.2  # 難易度上昇を緩やかに（0.5から0.2に）
+            self.shoot_chance += 0.002  # 難易度上昇を緩やかに（0.005から0.002に）
             self.create_enemies()
         
         # プレイヤーに到達判定
@@ -240,7 +236,7 @@ class InvadersGame:
         
         if self.game_over:
             if pyxel.btnp(pyxel.KEY_R):
-                self.reset_game()  # __init__()の代わりにreset_game()を呼び出す
+                self.reset_game()
             return
         
         # プレイヤーの更新
@@ -272,7 +268,7 @@ class InvadersGame:
         for bullet in self.enemy_bullets[:]:
             if bullet.is_active and bullet.collides_with(self.player):
                 bullet.is_active = False
-                if self.player.hit():  # プレイヤーのhitメソッドを呼び出し、戻り値がTrueならゲームオーバー
+                if self.player.hit():
                     self.game_over = True
                 break
         
@@ -285,6 +281,12 @@ class InvadersGame:
         # 不要なオブジェクトの削除
         self.player_bullets = [b for b in self.player_bullets if b.is_active]
         self.enemy_bullets = [b for b in self.enemy_bullets if b.is_active]
+        
+        # 連射機能の追加（SPACEキーを押し続けると一定間隔で発射）
+        if pyxel.btn(pyxel.KEY_SPACE) and self.player.bullet_cooldown <= 0:
+            bullet_x = self.player.x + self.player.width // 2 - 1
+            self.add_player_bullet(bullet_x, self.player.y)
+            self.player.bullet_cooldown = 8  # クールダウンを10から8に短縮
     
     def draw(self):
         """ゲームの描画"""
