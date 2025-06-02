@@ -4,13 +4,15 @@ from abc import ABC, abstractmethod
 
 class GameObject(ABC):
     """ゲームオブジェクトの基底クラス"""
-    def __init__(self, x, y, width, height, color):
+    def __init__(self, x, y, width, height, color, sprite_x=None, sprite_y=None):
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.color = color
         self.is_active = True
+        self.sprite_x = sprite_x  # スプライトのX座標（画像内）
+        self.sprite_y = sprite_y  # スプライトのY座標（画像内）
     
     @abstractmethod
     def update(self, game):
@@ -20,7 +22,12 @@ class GameObject(ABC):
     def draw(self):
         """オブジェクトを描画"""
         if self.is_active:
-            pyxel.rect(self.x, self.y, self.width, self.height, self.color)
+            if self.sprite_x is not None and self.sprite_y is not None:
+                # スプライトを描画
+                pyxel.blt(self.x, self.y, 0, self.sprite_x, self.sprite_y, self.width, self.height, 0)
+            else:
+                # スプライトがない場合は四角形を描画
+                pyxel.rect(self.x, self.y, self.width, self.height, self.color)
     
     def collides_with(self, other):
         """他のオブジェクトとの衝突判定"""
@@ -36,7 +43,7 @@ class GameObject(ABC):
 class Player(GameObject):
     """プレイヤークラス"""
     def __init__(self, x, y, game_width):
-        super().__init__(x, y, 8, 8, 11)
+        super().__init__(x, y, 8, 8, 11, 0, 0)  # スプライト座標(0,0)を追加
         self.speed = 3
         self.game_width = game_width
         self.bullet_cooldown = 0
@@ -116,15 +123,16 @@ class Player(GameObject):
 
 class Bullet(GameObject):
     """弾の基底クラス"""
-    def __init__(self, x, y, width, height, color, speed):
-        super().__init__(x, y, width, height, color)
+    def __init__(self, x, y, width, height, color, sprite_x=None, sprite_y=None, speed=4):
+        super().__init__(x, y, width, height, color, sprite_x, sprite_y)
         self.speed = speed
 
 
 class PlayerBullet(Bullet):
     """プレイヤーの弾クラス"""
     def __init__(self, x, y):
-        super().__init__(x, y, 2, 4, 10, 5)  # 速度を4から5に上昇
+        super().__init__(x, y, 2, 4, 10, 0, 8)  # スプライト座標(0,8)を追加
+        self.speed = 5
     
     def update(self, game):
         self.y -= self.speed
@@ -135,7 +143,8 @@ class PlayerBullet(Bullet):
 class EnemyBullet(Bullet):
     """敵の弾クラス"""
     def __init__(self, x, y):
-        super().__init__(x, y, 2, 4, 8, 1)  # 速度を2から1に減速
+        super().__init__(x, y, 2, 4, 8, 2, 8)  # スプライト座標(2,8)を追加
+        self.speed = 1
     
     def update(self, game):
         self.y += self.speed
@@ -145,8 +154,8 @@ class EnemyBullet(Bullet):
 
 class SpecialBullet(Bullet):
     """必殺技の弾の基底クラス"""
-    def __init__(self, x, y, width, height, color, speed):
-        super().__init__(x, y, width, height, color, speed)
+    def __init__(self, x, y, width, height, color, sprite_x=None, sprite_y=None, speed=4):
+        super().__init__(x, y, width, height, color, sprite_x, sprite_y, speed)
         self.penetrate = False  # 貫通するかどうか
         self.bounce = False  # 跳ね返るかどうか
         self.bounce_count = 0  # 跳ね返った回数
@@ -158,7 +167,7 @@ class SpecialBullet(Bullet):
 class PenetratingBullet(SpecialBullet):
     """貫通弾クラス"""
     def __init__(self, x, y):
-        super().__init__(x, y, 4, 8, 9, 6)  # 大きめで速い弾
+        super().__init__(x, y, 4, 8, 9, 4, 8)  # スプライト座標(4,8)を追加
         self.penetrate = True
     
     def update(self, game):
@@ -170,7 +179,7 @@ class PenetratingBullet(SpecialBullet):
 class BouncingBullet(SpecialBullet):
     """バウンス弾クラス"""
     def __init__(self, x, y, direction):
-        super().__init__(x, y, 4, 4, 12, 3)  # 速度を少し遅く
+        super().__init__(x, y, 4, 4, 12, 8, 8)  # スプライト座標(8,8)を追加
         self.bounce = True
         self.dx = direction  # 方向係数（絶対値が大きいほど水平方向の動きが大きい）
         self.dy = -1 if direction > 0 else -1  # 上向き
@@ -199,9 +208,13 @@ class BouncingBullet(SpecialBullet):
 
 class Enemy(GameObject):
     """敵クラス"""
-    def __init__(self, x, y):
-        super().__init__(x, y, 8, 8, 8)
+    def __init__(self, x, y, enemy_type=0):
+        # 敵タイプに応じてスプライト座標を設定
+        sprite_x = 8 + (enemy_type * 8)  # 敵タイプに応じて異なるスプライト
+        sprite_y = 0
+        super().__init__(x, y, 8, 8, 8, sprite_x, sprite_y)
         self.shoot_chance = 0.005  # 発射確率を0.01から0.005に減少
+        self.enemy_type = enemy_type
     
     def update(self, game):
         # 移動は EnemyManager で一括管理
@@ -230,7 +243,9 @@ class EnemyManager:
         # 敵の初期位置をより上に配置（y座標を変更）
         for y in range(3):  # 行数を5から3に減らす
             for x in range(6):
-                enemy = Enemy(20 + x * 20, 5 + y * 10)  # y座標を10から5に変更
+                # 行ごとに異なる敵タイプを使用
+                enemy_type = y % 3  # 0, 1, 2 の3種類
+                enemy = Enemy(20 + x * 20, 5 + y * 10, enemy_type)  # y座標を10から5に変更
                 enemy.shoot_chance = self.shoot_chance
                 self.enemies.append(enemy)
     
@@ -288,10 +303,16 @@ class InvadersGame:
         self.HEIGHT = 120
         
         # Pyxelの初期化（最初の1回だけ）
-        pyxel.init(self.WIDTH, self.HEIGHT, title="Invaders Game OOP")
+        pyxel.init(self.WIDTH, self.HEIGHT, title="AWS Invaders Game")
+        
+        # リソースファイルの読み込み
+        pyxel.load("invaders_assets.pyxres")
         
         # ゲームの初期状態をセット
         self.reset_game()
+        
+        # ポーズ状態
+        self.paused = False
         
         # ゲームループの開始
         pyxel.run(self.update, self.draw)
@@ -301,6 +322,8 @@ class InvadersGame:
         self.score = 0
         self.game_over = False
         self.start_time = pyxel.frame_count  # ゲーム開始時間を記録
+        self.pause_start_time = 0  # ポーズ開始時間
+        self.total_pause_time = 0  # 合計ポーズ時間
         
         # ゲームオブジェクト
         self.player = Player(self.WIDTH // 2, self.HEIGHT - 20, self.WIDTH)
@@ -340,8 +363,23 @@ class InvadersGame:
     
     def update(self):
         """ゲームの状態更新"""
+        # ゲーム終了
         if pyxel.btnp(pyxel.KEY_Q):
             pyxel.quit()
+        
+        # ポーズ切り替え（Pキー）
+        if pyxel.btnp(pyxel.KEY_P):
+            self.paused = not self.paused
+            if self.paused:
+                # ポーズ開始時間を記録
+                self.pause_start_time = pyxel.frame_count
+            else:
+                # ポーズ解除時に合計ポーズ時間を更新
+                self.total_pause_time += pyxel.frame_count - self.pause_start_time
+        
+        # ポーズ中は更新しない
+        if self.paused:
+            return
         
         if self.game_over:
             if pyxel.btnp(pyxel.KEY_R):
@@ -446,8 +484,8 @@ class InvadersGame:
         for bullet in self.special_bullets:
             bullet.draw()
         
-        # プレイ時間の計算（秒単位）
-        play_time = (pyxel.frame_count - self.start_time) // 30  # 30FPSとして計算
+        # プレイ時間の計算（秒単位）- ポーズ時間を考慮
+        play_time = (pyxel.frame_count - self.start_time - self.total_pause_time) // 30  # 30FPSとして計算
         minutes = play_time // 60
         seconds = play_time % 60
         
@@ -470,6 +508,18 @@ class InvadersGame:
         if self.game_over:
             pyxel.text(self.WIDTH // 2 - 30, self.HEIGHT // 2, "GAME OVER", 8)
             pyxel.text(self.WIDTH // 2 - 40, self.HEIGHT // 2 + 10, "PRESS R TO RESTART", 8)
+        
+        # ポーズ中の表示
+        if self.paused:
+            # 半透明の黒い背景
+            for y in range(self.HEIGHT):
+                for x in range(0, self.WIDTH, 2):
+                    offset = y % 2
+                    pyxel.pset(x + offset, y, 0)
+            
+            # ポーズメッセージ
+            pyxel.text(self.WIDTH // 2 - 18, self.HEIGHT // 2, "GAME PAUSED", 7)
+            pyxel.text(self.WIDTH // 2 - 35, self.HEIGHT // 2 + 10, "PRESS P TO CONTINUE", 7)
 
 
 if __name__ == "__main__":
