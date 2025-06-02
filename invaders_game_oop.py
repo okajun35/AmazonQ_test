@@ -37,13 +37,20 @@ class Player(GameObject):
     """プレイヤークラス"""
     def __init__(self, x, y, game_width):
         super().__init__(x, y, 8, 8, 11)
-        self.speed = 3  # 移動速度を2から3に上昇
+        self.speed = 3
         self.game_width = game_width
         self.bullet_cooldown = 0
-        self.lives = 5  # プレイヤーのライフ数
-        self.invincible = False  # 無敵状態かどうか
-        self.invincible_timer = 0  # 無敵時間のタイマー
-        self.blink_timer = 0  # 点滅表示用タイマー
+        self.lives = 5
+        self.invincible = False
+        self.invincible_timer = 0
+        self.blink_timer = 0
+        
+        # 必殺技関連
+        self.special_charge = 0  # 必殺技のチャージ量
+        self.special_max_charge = 100  # 必殺技の最大チャージ量
+        self.special_charging = False  # チャージ中かどうか
+        self.special_cooldown = 0  # 必殺技のクールダウン
+        self.special_type = 0  # 0: 貫通弾, 1: バウンス弾
     
     def update(self, game):
         # 左右移動
@@ -56,10 +63,29 @@ class Player(GameObject):
         if self.bullet_cooldown > 0:
             self.bullet_cooldown -= 1
             
+        # 必殺技のチャージと発射
+        if pyxel.btn(pyxel.KEY_Z):  # Zキーでチャージ
+            self.special_charging = True
+            if self.special_charge < self.special_max_charge:
+                self.special_charge += 1
+        elif self.special_charging:  # Zキーを離したとき
+            self.special_charging = False
+            if self.special_charge >= self.special_max_charge and self.special_cooldown <= 0:
+                # 必殺技発射
+                game.fire_special_weapon(self.special_type)
+                self.special_charge = 0
+                self.special_cooldown = 180  # 3秒間のクールダウン
+                # 必殺技タイプの切り替え
+                self.special_type = (self.special_type + 1) % 2
+        
+        # 必殺技のクールダウン
+        if self.special_cooldown > 0:
+            self.special_cooldown -= 1
+            
         # 無敵時間の処理
         if self.invincible:
             self.invincible_timer -= 1
-            self.blink_timer = (self.blink_timer + 1) % 6  # 点滅用タイマー
+            self.blink_timer = (self.blink_timer + 1) % 6
             if self.invincible_timer <= 0:
                 self.invincible = False
     
@@ -68,17 +94,23 @@ class Player(GameObject):
         if not self.invincible:
             self.lives -= 1
             if self.lives > 0:
-                # まだライフが残っている場合は無敵状態に
                 self.invincible = True
-                self.invincible_timer = 60  # 60フレーム（約1秒）の無敵時間
-                return False  # ゲームオーバーではない
-            return True  # ライフが0になったらゲームオーバー
+                self.invincible_timer = 60
+                return False
+            return True
         return False
     
     def draw(self):
         """プレイヤーを描画（無敵時は点滅）"""
         if not self.invincible or self.blink_timer < 3:
             super().draw()
+        
+        # チャージゲージの描画
+        charge_width = int((self.special_charge / self.special_max_charge) * 20)
+        pyxel.rect(self.x - 6, self.y + 10, 20, 2, 1)
+        if charge_width > 0:
+            pyxel.rect(self.x - 6, self.y + 10, charge_width, 2, 
+                      10 if self.special_charge < self.special_max_charge else 11)
 
 
 class Bullet(GameObject):
@@ -107,6 +139,60 @@ class EnemyBullet(Bullet):
     def update(self, game):
         self.y += self.speed
         if self.y > game.HEIGHT:
+            self.is_active = False
+
+
+class SpecialBullet(Bullet):
+    """必殺技の弾の基底クラス"""
+    def __init__(self, x, y, width, height, color, speed):
+        super().__init__(x, y, width, height, color, speed)
+        self.penetrate = False  # 貫通するかどうか
+        self.bounce = False  # 跳ね返るかどうか
+        self.bounce_count = 0  # 跳ね返った回数
+        self.max_bounce = 5  # 最大跳ね返り回数
+        self.dx = 0  # X方向の移動量
+        self.dy = 0  # Y方向の移動量
+
+
+class PenetratingBullet(SpecialBullet):
+    """貫通弾クラス"""
+    def __init__(self, x, y):
+        super().__init__(x, y, 4, 8, 9, 6)  # 大きめで速い弾
+        self.penetrate = True
+    
+    def update(self, game):
+        self.y -= self.speed
+        if self.y < 0:
+            self.is_active = False
+
+
+class BouncingBullet(SpecialBullet):
+    """バウンス弾クラス"""
+    def __init__(self, x, y, direction):
+        super().__init__(x, y, 4, 4, 12, 4)
+        self.bounce = True
+        self.dx = direction  # -1: 左斜め, 1: 右斜め
+        self.dy = -1  # 上向き
+    
+    def update(self, game):
+        # 移動
+        self.x += self.dx * self.speed
+        self.y += self.dy * self.speed
+        
+        # 左右の壁での跳ね返り
+        if self.x <= 0 or self.x >= game.WIDTH - self.width:
+            self.dx *= -1
+            self.bounce_count += 1
+        
+        # 上下の壁での跳ね返り（上端は跳ね返らず消滅）
+        if self.y <= 0:
+            self.is_active = False
+        elif self.y >= game.HEIGHT - self.height:
+            self.dy *= -1
+            self.bounce_count += 1
+        
+        # 最大跳ね返り回数を超えたら消滅
+        if self.bounce_count >= self.max_bounce:
             self.is_active = False
 
 
@@ -218,6 +304,7 @@ class InvadersGame:
         self.player = Player(self.WIDTH // 2, self.HEIGHT - 20, self.WIDTH)
         self.player_bullets = []
         self.enemy_bullets = []
+        self.special_bullets = []  # 必殺技の弾リスト
         self.enemy_manager = EnemyManager(self.WIDTH, self.HEIGHT)
         self.enemy_manager.create_enemies()
     
@@ -228,6 +315,26 @@ class InvadersGame:
     def add_enemy_bullet(self, x, y):
         """敵の弾を追加"""
         self.enemy_bullets.append(EnemyBullet(x, y))
+    
+    def fire_special_weapon(self, special_type):
+        """必殺技を発射"""
+        if special_type == 0:  # 貫通弾
+            self.special_bullets.append(PenetratingBullet(
+                self.player.x + self.player.width // 2 - 2,
+                self.player.y
+            ))
+        else:  # バウンス弾
+            # 左右に2発発射
+            self.special_bullets.append(BouncingBullet(
+                self.player.x + self.player.width // 2 - 2,
+                self.player.y,
+                -1  # 左斜め上
+            ))
+            self.special_bullets.append(BouncingBullet(
+                self.player.x + self.player.width // 2 - 2,
+                self.player.y,
+                1   # 右斜め上
+            ))
     
     def update(self):
         """ゲームの状態更新"""
@@ -252,6 +359,9 @@ class InvadersGame:
         for bullet in self.enemy_bullets:
             bullet.update(self)
         
+        for bullet in self.special_bullets:
+            bullet.update(self)
+        
         # 衝突判定（プレイヤーの弾と敵）
         for bullet in self.player_bullets[:]:
             if not bullet.is_active:
@@ -264,6 +374,19 @@ class InvadersGame:
                     self.score += 10
                     break
         
+        # 衝突判定（必殺技の弾と敵）
+        for bullet in self.special_bullets[:]:
+            if not bullet.is_active:
+                continue
+                
+            for enemy in self.enemy_manager.enemies:
+                if enemy.is_active and bullet.collides_with(enemy):
+                    enemy.is_active = False
+                    self.score += 20  # 必殺技は高得点
+                    if not bullet.penetrate:  # 貫通弾でなければ消滅
+                        bullet.is_active = False
+                        break
+        
         # 衝突判定（敵の弾とプレイヤー）
         for bullet in self.enemy_bullets[:]:
             if bullet.is_active and bullet.collides_with(self.player):
@@ -271,6 +394,18 @@ class InvadersGame:
                 if self.player.hit():
                     self.game_over = True
                 break
+        
+        # 衝突判定（必殺技の弾と敵の弾）
+        for special in self.special_bullets[:]:
+            if not special.is_active:
+                continue
+                
+            for bullet in self.enemy_bullets[:]:
+                if bullet.is_active and special.collides_with(bullet):
+                    bullet.is_active = False
+                    if not special.penetrate:  # 貫通弾でなければ消滅
+                        special.is_active = False
+                        break
         
         # 敵がプレイヤーに到達したらゲームオーバー
         for enemy in self.enemy_manager.enemies:
@@ -281,12 +416,13 @@ class InvadersGame:
         # 不要なオブジェクトの削除
         self.player_bullets = [b for b in self.player_bullets if b.is_active]
         self.enemy_bullets = [b for b in self.enemy_bullets if b.is_active]
+        self.special_bullets = [b for b in self.special_bullets if b.is_active]
         
-        # 連射機能の追加（SPACEキーを押し続けると一定間隔で発射）
+        # 連射機能（SPACEキーを押し続けると一定間隔で発射）
         if pyxel.btn(pyxel.KEY_SPACE) and self.player.bullet_cooldown <= 0:
             bullet_x = self.player.x + self.player.width // 2 - 1
             self.add_player_bullet(bullet_x, self.player.y)
-            self.player.bullet_cooldown = 8  # クールダウンを10から8に短縮
+            self.player.bullet_cooldown = 8
     
     def draw(self):
         """ゲームの描画"""
@@ -305,9 +441,22 @@ class InvadersGame:
         for bullet in self.enemy_bullets:
             bullet.draw()
         
+        for bullet in self.special_bullets:
+            bullet.draw()
+        
         # スコアとライフの表示
         pyxel.text(5, 5, f"SCORE: {self.score}", 7)
         pyxel.text(self.WIDTH - 60, 5, f"LIVES: {self.player.lives}", 7)
+        
+        # 必殺技の情報表示
+        special_type_name = "PENETRATE" if self.player.special_type == 0 else "BOUNCE"
+        pyxel.text(5, self.HEIGHT - 10, f"SPECIAL: {special_type_name}", 7)
+        
+        # 必殺技のクールダウン表示
+        if self.player.special_cooldown > 0:
+            cooldown_percent = self.player.special_cooldown / 180
+            pyxel.rect(5, self.HEIGHT - 6, 50, 3, 1)
+            pyxel.rect(5, self.HEIGHT - 6, int(50 * (1 - cooldown_percent)), 3, 11)
         
         # ゲームオーバー表示
         if self.game_over:
