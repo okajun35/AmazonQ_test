@@ -105,11 +105,11 @@ class Player(GameObject):
         if not self.invincible or self.blink_timer < 3:
             super().draw()
         
-        # チャージゲージの描画
-        charge_width = int((self.special_charge / self.special_max_charge) * 20)
-        pyxel.rect(self.x - 6, self.y + 10, 20, 2, 1)
+        # チャージゲージの描画（サイズを小さくして位置を調整）
+        charge_width = int((self.special_charge / self.special_max_charge) * 16)
+        pyxel.rect(self.x - 4, self.y + 10, 16, 2, 1)
         if charge_width > 0:
-            pyxel.rect(self.x - 6, self.y + 10, charge_width, 2, 
+            pyxel.rect(self.x - 4, self.y + 10, charge_width, 2, 
                       10 if self.special_charge < self.special_max_charge else 11)
 
 
@@ -169,14 +169,14 @@ class PenetratingBullet(SpecialBullet):
 class BouncingBullet(SpecialBullet):
     """バウンス弾クラス"""
     def __init__(self, x, y, direction):
-        super().__init__(x, y, 4, 4, 12, 4)
+        super().__init__(x, y, 4, 4, 12, 3)  # 速度を少し遅く
         self.bounce = True
-        self.dx = direction  # -1: 左斜め, 1: 右斜め
-        self.dy = -1  # 上向き
+        self.dx = direction  # 方向係数（絶対値が大きいほど水平方向の動きが大きい）
+        self.dy = -1 if direction > 0 else -1  # 上向き
     
     def update(self, game):
         # 移動
-        self.x += self.dx * self.speed
+        self.x += self.dx
         self.y += self.dy * self.speed
         
         # 左右の壁での跳ね返り
@@ -184,12 +184,12 @@ class BouncingBullet(SpecialBullet):
             self.dx *= -1
             self.bounce_count += 1
         
-        # 上下の壁での跳ね返り（上端は跳ね返らず消滅）
+        # 上下の壁での跳ね返り（上端も跳ね返るように変更）
         if self.y <= 0:
-            self.is_active = False
-        elif self.y >= game.HEIGHT - self.height:
-            self.dy *= -1
+            self.dy *= -1  # 上端でも跳ね返る
             self.bounce_count += 1
+        elif self.y >= game.HEIGHT - self.height:
+            self.is_active = False  # 下端に到達したら消滅
         
         # 最大跳ね返り回数を超えたら消滅
         if self.bounce_count >= self.max_bounce:
@@ -299,6 +299,7 @@ class InvadersGame:
         """ゲームの状態をリセット"""
         self.score = 0
         self.game_over = False
+        self.start_time = pyxel.frame_count  # ゲーム開始時間を記録
         
         # ゲームオブジェクト
         self.player = Player(self.WIDTH // 2, self.HEIGHT - 20, self.WIDTH)
@@ -323,17 +324,17 @@ class InvadersGame:
                 self.player.x + self.player.width // 2 - 2,
                 self.player.y
             ))
-        else:  # バウンス弾
-            # 左右に2発発射
+        else:  # バウンス弾（角度を調整して発射）
+            # 左右に2発発射、より水平方向に近い角度で
             self.special_bullets.append(BouncingBullet(
                 self.player.x + self.player.width // 2 - 2,
                 self.player.y,
-                -1  # 左斜め上
+                -1.5  # より水平に近い角度（左方向）
             ))
             self.special_bullets.append(BouncingBullet(
                 self.player.x + self.player.width // 2 - 2,
                 self.player.y,
-                1   # 右斜め上
+                1.5   # より水平に近い角度（右方向）
             ))
     
     def update(self):
@@ -444,19 +445,25 @@ class InvadersGame:
         for bullet in self.special_bullets:
             bullet.draw()
         
-        # スコアとライフの表示
+        # プレイ時間の計算（秒単位）
+        play_time = (pyxel.frame_count - self.start_time) // 30  # 30FPSとして計算
+        minutes = play_time // 60
+        seconds = play_time % 60
+        
+        # スコア、ライフ、プレイ時間の表示
         pyxel.text(5, 5, f"SCORE: {self.score}", 7)
         pyxel.text(self.WIDTH - 60, 5, f"LIVES: {self.player.lives}", 7)
+        pyxel.text(self.WIDTH // 2 - 20, 5, f"TIME: {minutes:02d}:{seconds:02d}", 7)
         
-        # 必殺技の情報表示
+        # 必殺技の情報表示（位置を調整）
         special_type_name = "PENETRATE" if self.player.special_type == 0 else "BOUNCE"
-        pyxel.text(5, self.HEIGHT - 10, f"SPECIAL: {special_type_name}", 7)
+        pyxel.text(5, self.HEIGHT - 12, f"SPECIAL: {special_type_name}", 7)
         
-        # 必殺技のクールダウン表示
+        # 必殺技のクールダウン表示（位置を調整）
         if self.player.special_cooldown > 0:
             cooldown_percent = self.player.special_cooldown / 180
-            pyxel.rect(5, self.HEIGHT - 6, 50, 3, 1)
-            pyxel.rect(5, self.HEIGHT - 6, int(50 * (1 - cooldown_percent)), 3, 11)
+            pyxel.rect(70, self.HEIGHT - 12, 40, 2, 1)
+            pyxel.rect(70, self.HEIGHT - 12, int(40 * (1 - cooldown_percent)), 2, 11)
         
         # ゲームオーバー表示
         if self.game_over:
