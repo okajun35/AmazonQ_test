@@ -106,10 +106,11 @@ class Player(GameObject):
             super().draw()
         
         # チャージゲージの描画（サイズを小さくして位置を調整）
+        # プレイヤーの上部に表示して、下部の情報と重ならないようにする
         charge_width = int((self.special_charge / self.special_max_charge) * 16)
-        pyxel.rect(self.x - 4, self.y + 10, 16, 2, 1)
+        pyxel.rect(self.x - 4, self.y - 4, 16, 2, 1)
         if charge_width > 0:
-            pyxel.rect(self.x - 4, self.y + 10, charge_width, 2, 
+            pyxel.rect(self.x - 4, self.y - 4, charge_width, 2, 
                       10 if self.special_charge < self.special_max_charge else 11)
 
 
@@ -450,20 +451,20 @@ class InvadersGame:
         minutes = play_time // 60
         seconds = play_time % 60
         
-        # スコア、ライフ、プレイ時間の表示
+        # スコア、ライフ、プレイ時間の表示（位置を調整）
         pyxel.text(5, 5, f"SCORE: {self.score}", 7)
-        pyxel.text(self.WIDTH - 60, 5, f"LIVES: {self.player.lives}", 7)
-        pyxel.text(self.WIDTH // 2 - 20, 5, f"TIME: {minutes:02d}:{seconds:02d}", 7)
+        pyxel.text(self.WIDTH - 40, 5, f"LIVES: {self.player.lives}", 7)
+        pyxel.text(self.WIDTH // 2 - 30, 5, f"TIME: {minutes:02d}:{seconds:02d}", 7)
         
-        # 必殺技の情報表示（位置を調整）
+        # 必殺技の情報表示（位置を調整、文字を小さく）
         special_type_name = "PENETRATE" if self.player.special_type == 0 else "BOUNCE"
-        pyxel.text(5, self.HEIGHT - 12, f"SPECIAL: {special_type_name}", 7)
+        pyxel.text(5, self.HEIGHT - 6, f"SP:{special_type_name}", 7)
         
         # 必殺技のクールダウン表示（位置を調整）
         if self.player.special_cooldown > 0:
             cooldown_percent = self.player.special_cooldown / 180
-            pyxel.rect(70, self.HEIGHT - 12, 40, 2, 1)
-            pyxel.rect(70, self.HEIGHT - 12, int(40 * (1 - cooldown_percent)), 2, 11)
+            pyxel.rect(70, self.HEIGHT - 6, 40, 2, 1)
+            pyxel.rect(70, self.HEIGHT - 6, int(40 * (1 - cooldown_percent)), 2, 11)
         
         # ゲームオーバー表示
         if self.game_over:
